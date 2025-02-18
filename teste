@@ -1,0 +1,73 @@
+#include <xc.h>
+#include <sys/attribs.h>
+
+// Configurações de Fuses (ajuste conforme necessário)
+#pragma config FNOSC = PRIPLL    // Oscilador Primário com PLL
+#pragma config POSCMOD = HS      // Oscilador de Cristal de Alta Velocidade
+#pragma config FPBDIV = DIV_1    // Periferia no mesmo clock da CPU
+#pragma config FWDTEN = OFF      // Watchdog Timer desativado
+
+// Definições de pinos
+#define LED LATBbits.LATB0  // LED no pino RB0
+#define BOTAO PORTBbits.RB1 // Botão no pino RB1
+
+void delay_ms(unsigned int ms) {
+    for (unsigned int i = 0; i < ms * 8000; i++) {
+        asm volatile("nop");
+    }
+}
+
+void setup() {
+    // Configuração do LED como saída
+    TRISBbits.TRISB0 = 0;  
+    LATBbits.LATB0 = 0;    
+
+    // Configuração do botão como entrada
+    TRISBbits.TRISB1 = 1;  
+    CNPUBbits.CNPUB1 = 1;  // Ativa pull-up interno no botão
+
+    // Configuração da UART para debug (TX: RB2, RX: RB3)
+    U1MODE = 0;  
+    U1STA = 0;
+    U1BRG = ((40000000 / 16) / 9600) - 1;  // Baud rate 9600
+    U1MODEbits.ON = 1;  
+    U1STAbits.UTXEN = 1; 
+
+    // Configuração do PWM no pino RB9 (OC1)
+    TRISBbits.TRISB9 = 0;
+    RPB9R = 0b0101;   // Mapeia RB9 para OC1
+    OC1CON = 0x0006;  // Modo PWM
+    OC1R = 5000;      // Ciclo de trabalho inicial
+    OC1RS = 10000;    // Período
+    OC1CONbits.ON = 1;
+}
+
+void uart_send(char *msg) {
+    while (*msg) {
+        while (U1STAbits.UTXBF); // Aguarda espaço no buffer
+        U1TXREG = *msg++;        
+    }
+}
+
+void loop() {
+    LED = 1;  // Acende o LED
+    uart_send("LED Ligado\r\n");
+    delay_ms(500);
+
+    LED = 0;  // Apaga o LED
+    uart_send("LED Desligado\r\n");
+    delay_ms(500);
+
+    if (BOTAO == 0) { // Se o botão for pressionado
+        uart_send("Botão pressionado!\r\n");
+        LED = 1;  // Mantém o LED aceso enquanto o botão estiver pressionado
+    }
+}
+
+int main() {
+    setup();
+    while (1) {
+        loop();
+    }
+    return 0;
+}
